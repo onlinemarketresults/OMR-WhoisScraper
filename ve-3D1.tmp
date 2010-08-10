@@ -1,0 +1,191 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.IO;
+using System.Text;
+using System.Windows.Forms;
+
+namespace LinksChecker
+{
+   public partial class MainForm : Form
+   {
+      Connection connection = new Connection();
+      Results results = new Results();
+      List<Inputs.Input> inputs = new List<Inputs.Input>;
+
+      public MainForm()
+      {
+         InitializeComponent();
+      }
+
+      private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
+      {
+         AboutBox aboutBox = new AboutBox();
+         aboutBox.ShowDialog(this);
+      }
+
+      private void optionsToolStripMenuItem_Click(object sender, EventArgs e)
+      {
+         OptionsForm form = new OptionsForm();
+         form.IsProxyEnabled = connection.IsProxyEnabled;
+
+         if (form.IsProxyEnabled)
+         {
+             form.Host = connection.ProxyHost;
+             form.Port = connection.ProxyPort;
+
+             form.IsProxyAuthEnabled = connection.IsProxyAuthEnabled;
+
+             if (form.IsProxyAuthEnabled)
+             {
+                 form.Username = connection.ProxyUsername;
+                 form.Password = connection.ProxyPassword;
+             }
+         }
+
+         if (form.ShowDialog(this) == DialogResult.OK)
+         {
+             connection.IsProxyEnabled = form.IsProxyEnabled;
+
+             if (connection.IsProxyEnabled)
+             {
+                 connection.setProxyAdress(form.Host, form.Port);
+
+                 bool isAuth = form.IsProxyAuthEnabled;
+                 connection.IsProxyAuthEnabled = isAuth;
+
+                 if (isAuth)
+                 {
+                     connection.setProxyCredentials(form.Username,
+                         form.Password);
+                 }
+             }
+         }
+      }
+
+      private void openToolStripMenuItem_Click(object sender, EventArgs e)
+      {
+          OpenFileDialog dlg = new OpenFileDialog();
+
+          if (dlg.ShowDialog(this) == DialogResult.OK)
+          {
+              this.Text = "Links Checker - " + dlg.FileName;
+
+              List<Inputs.Input> inputs = Inputs.readFromFile(dlg.FileName);
+
+              Thread t = new Thread(new ThreadStart(ThreadJob));
+              t.IsBackground = true;
+              t.Start();
+
+              //MessageBox.Show("cnt = " + inputs.Count);
+
+              foreach(Inputs.Input input in inputs)
+              {
+                 toolStripStatusLabelUrl.Text = "url: " + input.url + "; what: " + input.what;
+
+                 string page = connection.GetWebPage(input.url);
+
+                 int i = 0, cnt = 0;
+                 while((i = page.IndexOf(input.what, i)) != -1)
+                 {
+                    Anchor anchor = Utils.ExtractAnchor(page, i);
+                    results.Add(cnt + 1, input.url, anchor);
+                    addItemToListView(cnt + 1, input.url, anchor);
+
+                    i++; cnt++;
+                 }
+
+                 /*if(cnt == 0)
+                 {
+                    //toolStripStatusLabelUrl.Text = "No link found";
+                    //Console.WriteLine("NO LINK FOUND");
+                    //tw.WriteLine("NO LINK FOUND for url=" + url + ", what=" + what);
+                 }*/
+              }
+
+             /*
+              toolStripStatusLabelUrl.Text = "Competed";
+
+              toolStripProgressBar.Minimum = 0;
+              toolStripProgressBar.Maximum = 100;
+              toolStripProgressBar.Value = 40;
+             */
+          }
+      }
+
+      void ThreadJob()
+      {
+
+         /*
+         MethodInvoker updateCounterDelegate = new MethodInvoker(UpdateCount);
+         int localTarget;
+         lock(stateLock)
+         {
+            localTarget = target;
+         }
+         UpdateStatus("Starting");
+
+         lock(stateLock)
+         {
+            currentCount = 0;
+         }
+         Invoke(updateCounterDelegate);
+         // Pause before starting
+         Thread.Sleep(500);
+         UpdateStatus("Counting");
+         for(int i = 0; i < localTarget; i++)
+         {
+            lock(stateLock)
+            {
+               currentCount = i;
+            }
+            // Synchronously show the counter
+            Invoke(updateCounterDelegate);
+            Thread.Sleep(100);
+         }
+         UpdateStatus("Finished");
+         Invoke(new MethodInvoker(EnableButton));*/
+      }
+
+      void updateStatus(string value)
+      {
+         if(InvokeRequired)
+         {
+            // We're not in the UI thread, so we need to call BeginInvoke
+            BeginInvoke(new StringParameterDelegate(UpdateStatus), new object[] { value });
+            return;
+         }
+         // Must be on the UI thread if we've got this far
+         toolStripStatusLabelUrl.Text = value;
+      }
+
+      private void addItemToListView(int linkNumber, string url, Anchor anchor)
+      {
+         string[] items = new string[7];
+         items[0] = linkNumber.ToString();
+         items[1] = url;
+         items[2] = anchor.href;
+         items[3] = anchor.title;
+         items[4] = anchor.rel;
+         items[5] = anchor.target;
+         items[6] = anchor.anchor;
+
+         listView.Items.Add(new ListViewItem(items));
+      }
+
+      private void buttonSaveAs_Click(object sender, EventArgs e)
+      {
+         SaveFileDialog dlg = new SaveFileDialog();
+         dlg.Filter = "Html Files (*.html)|*.html";
+
+         if(dlg.ShowDialog() == DialogResult.OK)
+         {
+            TextWriter tw = new StreamWriter(dlg.FileName);
+            tw.Write(results.ToString());
+            tw.Close();
+         }
+      }
+   }
+}
